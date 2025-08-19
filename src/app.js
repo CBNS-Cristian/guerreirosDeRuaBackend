@@ -10,9 +10,8 @@ const app = express();
 // Middlewares
 app.use(cors({
     origin: [
-        'http://10.0.0.132:8080',
+        'https://guerreirosderua.onrender.com',
         'http://localhost:5500',
-        'http://localhost:27752',
         'https://cbns-cristian.github.io'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
@@ -23,6 +22,13 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+const rateLimit = require('express-rate-limit');
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100 
+});
+app.use(limiter);
 
 // Rotas
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
