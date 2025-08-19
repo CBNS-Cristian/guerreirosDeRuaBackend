@@ -7,14 +7,13 @@ module.exports = {
         try {
             const animais = await Animal.findAll();
             
-            // Adicionar URL completa para as imagens com timestamp para evitar cache
+           
             const animaisComUrl = animais.map(animal => {
                 let foto_url = null;
                 
                 if (animal.foto) {
-                    // Usar timestamp para evitar cache do navegador
-                    const timestamp = Date.now();
-                    foto_url = `${req.protocol}://${req.get('host')}/uploads/${animal.foto}?t=${timestamp}`;
+                 
+                    foto_url = `${req.protocol}://${req.get('host')}/api/animais/imagem/${animal.foto}`;
                 }
                 
                 return {
@@ -56,11 +55,10 @@ module.exports = {
                 adotado: false
             });
 
-            // Adicionar URL completa da foto com timestamp
-            const timestamp = Date.now();
+           
             const animalComUrl = {
                 ...novoAnimal,
-                foto_url: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}?t=${timestamp}`
+                foto_url: `${req.protocol}://${req.get('host')}/api/animais/imagem/${req.file.filename}`
             };
 
             res.status(201).json(animalComUrl);
@@ -84,11 +82,10 @@ module.exports = {
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
             
-            // Adicionar URL completa da foto com timestamp
+          
             let foto_url = null;
             if (animal.foto) {
-                const timestamp = Date.now();
-                foto_url = `${req.protocol}://${req.get('host')}/uploads/${animal.foto}?t=${timestamp}`;
+                foto_url = `${req.protocol}://${req.get('host')}/api/animais/imagem/${animal.foto}`;
             }
             
             const animalComUrl = {
@@ -125,7 +122,7 @@ module.exports = {
                 adotado: req.body.adotado !== undefined ? req.body.adotado : animal.adotado
             };
 
-            // Remove a foto antiga se foi enviada uma nova
+          
             if (req.file && animal.foto && animal.foto !== req.file.filename) {
                 try {
                     fs.unlinkSync(path.join(__dirname, '../uploads', animal.foto));
@@ -136,11 +133,10 @@ module.exports = {
 
             const animalAtualizado = await Animal.update(id, dadosAtualizados);
             
-            // Adicionar URL completa da foto com timestamp
+          
             let foto_url = null;
             if (dadosAtualizados.foto) {
-                const timestamp = Date.now();
-                foto_url = `${req.protocol}://${req.get('host')}/uploads/${dadosAtualizados.foto}?t=${timestamp}`;
+                foto_url = `${req.protocol}://${req.get('host')}/api/animais/imagem/${dadosAtualizados.foto}`;
             }
             
             const animalComUrl = {
@@ -207,22 +203,28 @@ module.exports = {
         }
     },
 
-    // Nova rota para servir imagens diretamente (alternativa)
+    // Método para servir imagens através da API
     async servirImagem(req, res) {
         try {
             const { filename } = req.params;
             const filePath = path.join(__dirname, '../uploads', filename);
             
+            console.log('Tentando servir imagem:', filename);
+            console.log('Caminho do arquivo:', filePath);
+            
             // Verifica se arquivo existe
             if (!fs.existsSync(filePath)) {
+                console.log('Arquivo não encontrado:', filePath);
                 return res.status(404).json({ error: 'Imagem não encontrada' });
             }
 
             // Headers para evitar bloqueio ORB
             res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
             res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Cache-Control', 'public, max-age=3600');
-            
+            res.setHeader('Access-Control-Expose-Headers', '*');
+            res.setHeader('Timing-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 horas
+
             // Configurar content-type baseado na extensão
             if (filename.endsWith('.png')) {
                 res.setHeader('Content-Type', 'image/png');
@@ -234,10 +236,22 @@ module.exports = {
                 res.setHeader('Content-Type', 'application/octet-stream');
             }
             
-            fs.createReadStream(filePath).pipe(res);
+            // Servir o arquivo
+            const stream = fs.createReadStream(filePath);
+            stream.on('error', (error) => {
+                console.error('Erro ao ler arquivo:', error);
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Erro ao carregar imagem' });
+                }
+            });
+            
+            stream.pipe(res);
+            
         } catch (error) {
             console.error('Erro ao servir imagem:', error);
-            res.status(500).json({ error: 'Erro ao carregar imagem' });
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Erro interno ao carregar imagem' });
+            }
         }
     }
 };
