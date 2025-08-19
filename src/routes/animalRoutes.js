@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const upload = require('../config/upload');
 const animalController = require('../controllers/animalController');
+const authMiddleware = require('../middlewares/authMiddleware');
 
 // Rotas CRUD completas para animais
 router.route('/')
