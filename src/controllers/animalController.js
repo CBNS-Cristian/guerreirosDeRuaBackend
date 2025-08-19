@@ -7,12 +7,9 @@ module.exports = {
         try {
             const animais = await Animal.findAll();
             
-            // PARA TODOS OS ANIMAIS (antigos e novos), adicionar URL completa
             const animaisComUrl = animais.map(animal => ({
                 ...animal,
-                foto_url: animal.foto 
-                    ? `${req.protocol}://${req.get('host')}/uploads/${animal.foto}`
-                    : null
+                foto_url: animal.foto ? `${req.protocol}://${req.get('host')}/uploads/${animal.foto}` : null
             }));
             
             res.json(animaisComUrl);
