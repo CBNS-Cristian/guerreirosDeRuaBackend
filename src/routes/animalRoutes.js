@@ -14,6 +14,8 @@ router.route('/:id')
   .put(upload.single('foto'), animalController.atualizarAnimal)
   .delete(animalController.excluirAnimal);
 
+router.get('/imagem/:filename', animalController.servirImagem);
+
 router.patch('/:id/adotar', authMiddleware, animalController.marcarComoAdotado);
 
 module.exports = router;

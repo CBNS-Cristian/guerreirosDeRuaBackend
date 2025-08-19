@@ -44,8 +44,26 @@ if (process.env.NODE_ENV === 'production') {
   app.use('/api/', limiter);
 }
 
-// Servir arquivos estáticos
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Middleware específico para arquivos estáticos (IMPORTANTE: resolver ORB)
+app.use('/uploads', (req, res, next) => {
+    // Headers para evitar bloqueio ORB
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    next();
+}, express.static(path.join(__dirname, 'uploads'), {
+    setHeaders: (res, path) => {
+        // Configurar content-type correto baseado na extensão do arquivo
+        if (path.endsWith('.png')) {
+            res.setHeader('Content-Type', 'image/png');
+        } else if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+            res.setHeader('Content-Type', 'image/jpeg');
+        } else if (path.endsWith('.gif')) {
+            res.setHeader('Content-Type', 'image/gif');
+        }
+    }
+}));
 
 // Rotas
 app.use('/api/animais', animalRoutes);
