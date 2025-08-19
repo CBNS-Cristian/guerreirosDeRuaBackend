@@ -4,18 +4,22 @@ const cors = require('cors');
 const path = require('path');
 const animalRoutes = require('./routes/animalRoutes');
 const authRoutes = require('./routes/authRoutes');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-// Middlewares
+app.set('trust proxy', 1); 
+
+// Middlewares - CORS primeiro
 app.use(cors({
     origin: [
+        'https://cbns-cristian.github.io',
         'https://guerreirosderua.onrender.com',
         'http://localhost:5500',
-        'https://cbns-cristian.github.io'
+        'http://localhost:3000'
     ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
     credentials: true,
     optionsSuccessStatus: 200
 }));
@@ -23,12 +27,22 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const rateLimit = require('express-rate-limit');
+// Rate limiting mais generoso
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100 
+  max: 1000, // Aumentado de 100 para 1000
+  message: JSON.stringify({
+    error: 'Muitas requisições. Tente novamente em 15 minutos.'
+  }),
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { trustProxy: false }
 });
-app.use(limiter);
+
+// Aplicar rate limit apenas em produção
+if (process.env.NODE_ENV === 'production') {
+  app.use('/api/', limiter);
+}
 
 // Rotas
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -39,13 +53,21 @@ app.use('/api/auth', authRoutes);
 app.get('/health', (req, res) => {
     res.status(200).json({ 
         status: 'online',
-        timestamp: new Date().toISOString() 
+        timestamp: new Date().toISOString(),
+        ip: req.ip,
+        forwarded: req.headers['x-forwarded-for']
     });
 });
 
 // Error handling
 app.use((err, req, res, next) => {
     console.error('[ERRO]', err.stack);
+    
+    if (err.statusCode === 429) {
+        return res.status(429).json({ 
+            error: 'Muitas requisições. Tente novamente mais tarde.'
+        });
+    }
     
     if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({ error: 'Arquivo muito grande. Tamanho máximo: 5MB' });
@@ -67,4 +89,5 @@ app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
     console.log(`📁 Acesse os uploads em: http://localhost:${PORT}/uploads`);
     console.log(`🛠️  Modo: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔒 Trust proxy: ${app.get('trust proxy')}`);
 });

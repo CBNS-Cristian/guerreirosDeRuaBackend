@@ -9,13 +9,15 @@ const pool = mysql.createPool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 27752, // Porta do Aiven
+    port: process.env.DB_PORT || 27752,
     ssl: {
-        ca: fs.readFileSync(path.join(__dirname, '../ca.pem')) // Parêntese faltante adicionado aqui
+        ca: fs.readFileSync(path.join(__dirname, '../ca.pem'))
     },
     waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
+    connectionLimit: 15,
+    queueLimit: 0,
+    acquireTimeout: 60000,
+    timeout: 60000
 });
 
 // Teste de conexão ao iniciar
