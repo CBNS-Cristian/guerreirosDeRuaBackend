@@ -203,14 +203,12 @@ module.exports = {
         }
     },
 
-    // Método para servir imagens através da API
     async servirImagem(req, res) {
         try {
             const { filename } = req.params;
             const filePath = path.join(__dirname, '../uploads', filename);
             
-            console.log('Tentando servir imagem:', filename);
-            console.log('Caminho do arquivo:', filePath);
+            console.log('Servindo imagem:', filename);
             
             // Verifica se arquivo existe
             if (!fs.existsSync(filePath)) {
@@ -218,11 +216,10 @@ module.exports = {
                 return res.status(404).json({ error: 'Imagem não encontrada' });
             }
 
-            // Headers para evitar bloqueio ORB
+            // Headers para evitar bloqueio ORB - ESSENCIAIS
             res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
             res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Expose-Headers', '*');
-            res.setHeader('Timing-Allow-Origin', '*');
+            res.setHeader('Access-Control-Expose-Headers', 'Content-Length');
             res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 horas
 
             // Configurar content-type baseado na extensão
@@ -236,19 +233,19 @@ module.exports = {
                 res.setHeader('Content-Type', 'application/octet-stream');
             }
             
-            // Servir o arquivo
+            // Servir o arquivo - SIMPLES E DIRETO
             const stream = fs.createReadStream(filePath);
+            
             stream.on('error', (error) => {
                 console.error('Erro ao ler arquivo:', error);
-                if (!res.headersSent) {
-                    res.status(500).json({ error: 'Erro ao carregar imagem' });
-                }
+                // NÃO tente enviar JSON aqui - já pode ter iniciado o response
             });
             
             stream.pipe(res);
             
         } catch (error) {
             console.error('Erro ao servir imagem:', error);
+            // Só envia erro se ainda não começou a response
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Erro interno ao carregar imagem' });
             }
