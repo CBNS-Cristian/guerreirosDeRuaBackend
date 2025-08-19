@@ -108,19 +108,19 @@ module.exports = {
     },
 
     async marcarComoAdotado(req, res) {
-        try {
-            const animal = await Animal.findByPk(req.params.id);
-            if (!animal) {
-                return res.status(404).json({ error: 'Animal não encontrado' });
-            }
+       try {
+        const animal = await Animal.findByPk(req.params.id);
+        if (!animal) {
+            return res.status(404).json({ error: 'Animal não encontrado' });
+        }
 
-            await Animal.update(req.params.id, { adotado: true });
-            res.json({ message: 'Animal marcado como adotado com sucesso!' });
-        } catch (error) {
-            res.status(500).json({ 
-                error: 'Erro ao atualizar status',
-                details: process.env.NODE_ENV === 'development' ? error.message : null
-            });
+        await Animal.update(req.params.id, { adotado: true });
+        res.json({ message: 'Animal marcado como adotado com sucesso!' });
+         } catch (error) {
+        res.status(500).json({ 
+            error: 'Erro ao atualizar status',
+            details: process.env.NODE_ENV === 'development' ? error.message : null
+        });
         }
     },
 

@@ -13,6 +13,6 @@ router.route('/:id')
   .put(upload.single('foto'), animalController.atualizarAnimal)
   .delete(animalController.excluirAnimal);
 
-router.patch('/:id/adotar', animalController.marcarComoAdotado);
+router.patch('/:id/adotar', authMiddleware, animalController.marcarComoAdotado);
 
 module.exports = router;
