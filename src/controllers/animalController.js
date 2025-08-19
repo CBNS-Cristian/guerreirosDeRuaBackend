@@ -6,7 +6,14 @@ module.exports = {
     async listarAnimais(req, res) {
         try {
             const animais = await Animal.findAll();
-            res.json(animais);
+            
+            // Adicionar URL completa para as imagens
+            const animaisComUrl = animais.map(animal => ({
+                ...animal,
+                foto_url: animal.foto ? `${req.protocol}://${req.get('host')}/uploads/${animal.foto}` : null
+            }));
+            
+            res.json(animaisComUrl);
         } catch (error) {
             console.error('Erro ao listar animais:', error);
             res.status(500).json({ 
@@ -39,7 +46,13 @@ module.exports = {
                 adotado: false
             });
 
-            res.status(201).json(novoAnimal);
+            // Adicionar URL completa da foto
+            const animalComUrl = {
+                ...novoAnimal,
+                foto_url: `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`
+            };
+
+            res.status(201).json(animalComUrl);
 
         } catch (error) {
             console.error('Erro ao cadastrar animal:', error);
@@ -59,7 +72,14 @@ module.exports = {
             if (!animal) {
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
-            res.json(animal);
+            
+            // Adicionar URL completa da foto
+            const animalComUrl = {
+                ...animal,
+                foto_url: animal.foto ? `${req.protocol}://${req.get('host')}/uploads/${animal.foto}` : null
+            };
+            
+            res.json(animalComUrl);
         } catch (error) {
             res.status(500).json({ 
                 error: 'Erro ao buscar animal',
@@ -94,7 +114,14 @@ module.exports = {
             }
 
             const animalAtualizado = await Animal.update(id, dadosAtualizados);
-            res.json(animalAtualizado);
+            
+            // Adicionar URL completa da foto
+            const animalComUrl = {
+                ...animalAtualizado,
+                foto_url: dadosAtualizados.foto ? `${req.protocol}://${req.get('host')}/uploads/${dadosAtualizados.foto}` : null
+            };
+            
+            res.json(animalComUrl);
 
         } catch (error) {
             if (req.file) {

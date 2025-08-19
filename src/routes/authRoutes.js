@@ -1,19 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const upload = require('../config/upload');
-const animalController = require('../controllers/animalController');
-const authMiddleware = require('../middlewares/authMiddleware');
+const authController = require('../controllers/authController');
 
-// Rotas CRUD completas para animais
-router.route('/')
-  .get(animalController.listarAnimais)
-  .post(upload.single('foto'), animalController.cadastrarAnimal);
+// Rotas de autenticação
+router.post('/login', authController.login);
+router.post('/register', authController.register);
 
-router.route('/:id')
-  .get(animalController.buscarAnimalPorId)
-  .put(upload.single('foto'), animalController.atualizarAnimal)
-  .delete(animalController.excluirAnimal);
-
-router.patch('/:id/adotar', authMiddleware, animalController.marcarComoAdotado);
+// Rotas para desenvolvimento apenas
+if (process.env.NODE_ENV === 'development') {
+  router.post('/reset-password', authController.resetPassword);
+  router.post('/force-reset', authController.forceResetPassword);
+}
 
 module.exports = router;

@@ -30,7 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 // Rate limiting mais generoso
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000, // Aumentado de 100 para 1000
+  max: 1000,
   message: JSON.stringify({
     error: 'Muitas requisições. Tente novamente em 15 minutos.'
   }),
@@ -44,8 +44,10 @@ if (process.env.NODE_ENV === 'production') {
   app.use('/api/', limiter);
 }
 
-// Rotas
+// Servir arquivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Rotas
 app.use('/api/animais', animalRoutes);
 app.use('/api/auth', authRoutes);
 
@@ -57,6 +59,11 @@ app.get('/health', (req, res) => {
         ip: req.ip,
         forwarded: req.headers['x-forwarded-for']
     });
+});
+
+// Rota de fallback para SPA
+app.get('*', (req, res) => {
+    res.status(404).json({ error: 'Endpoint não encontrado' });
 });
 
 // Error handling
