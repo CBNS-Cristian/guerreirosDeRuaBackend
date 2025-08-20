@@ -2,21 +2,57 @@ const Animal = require('../models/Animal');
 const fs = require('fs');
 const path = require('path');
 
+// Função auxiliar para ler imagens
+const lerImagemComoBase64 = async (filename) => {
+    return new Promise((resolve, reject) => {
+        const filePath = path.join(__dirname, '../uploads', filename);
+        
+        // Verifica se o arquivo existe
+        fs.access(filePath, fs.constants.F_OK, (err) => {
+            if (err) {
+                reject(new Error('Arquivo não encontrado: ' + filename));
+                return;
+            }
+            
+            // Lê o arquivo
+            fs.readFile(filePath, (error, data) => {
+                if (error) {
+                    reject(error);
+                    return;
+                }
+                
+                const base64 = data.toString('base64');
+                let mimeType = 'image/png';
+                
+                if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+                    mimeType = 'image/jpeg';
+                } else if (filename.endsWith('.gif')) {
+                    mimeType = 'image/gif';
+                }
+                
+                resolve(`data:${mimeType};base64,${base64}`);
+            });
+        });
+    });
+};
+
 module.exports = {
     async listarAnimais(req, res) {
         try {
             const animais = await Animal.findAll();
             
-            // ✅ MÉTODO GARANTIDO: Base64 incorporado no JSON
             const animaisComImagens = await Promise.all(
                 animais.map(async (animal) => {
                     let imagem_base64 = null;
                     
                     if (animal.foto) {
                         try {
-                            imagem_base64 = await this.lerImagemComoBase64(animal.foto);
+
+                            imagem_base64 = await lerImagemComoBase64(animal.foto);
                         } catch (error) {
                             console.warn(`Imagem ${animal.foto} não encontrada:`, error.message);
+
+                            imagem_base64 = null;
                         }
                     }
                     
@@ -28,7 +64,7 @@ module.exports = {
                         descricao: animal.descricao,
                         data_resgate: animal.data_resgate,
                         adotado: animal.adotado,
-                        imagem_base64: imagem_base64  // ✅ IMAGEM DIRETA NO JSON
+                        imagem_base64: imagem_base64
                     };
                 })
             );
@@ -41,38 +77,6 @@ module.exports = {
                 details: process.env.NODE_ENV === 'development' ? error.message : null
             });
         }
-    },
-
-    // Método para ler imagem como Base64
-    async lerImagemComoBase64(filename) {
-        return new Promise((resolve, reject) => {
-            const filePath = path.join(__dirname, '../uploads', filename);
-            
-            fs.access(filePath, fs.constants.F_OK, (err) => {
-                if (err) {
-                    reject(new Error('Arquivo não encontrado'));
-                    return;
-                }
-                
-                fs.readFile(filePath, (error, data) => {
-                    if (error) {
-                        reject(error);
-                        return;
-                    }
-                    
-                    const base64 = data.toString('base64');
-                    let mimeType = 'image/png';
-                    
-                    if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
-                        mimeType = 'image/jpeg';
-                    } else if (filename.endsWith('.gif')) {
-                        mimeType = 'image/gif';
-                    }
-                    
-                    resolve(`data:${mimeType};base64,${base64}`);
-                });
-            });
-        });
     },
 
     async cadastrarAnimal(req, res) {
@@ -98,10 +102,10 @@ module.exports = {
                 adotado: false
             });
 
-            // ✅ Retorna a imagem já em Base64
+            // Gera Base64 para a nova imagem
             let imagem_base64 = null;
             try {
-                imagem_base64 = await this.lerImagemComoBase64(req.file.filename);
+                imagem_base64 = await lerImagemComoBase64(req.file.filename);
             } catch (error) {
                 console.warn('Erro ao processar imagem nova:', error.message);
             }
@@ -114,7 +118,7 @@ module.exports = {
                 descricao: novoAnimal.descricao,
                 data_resgate: novoAnimal.data_resgate,
                 adotado: novoAnimal.adotado,
-                imagem_base64: imagem_base64  // ✅ IMAGEM DIRETA NO JSON
+                imagem_base64: imagem_base64
             });
 
         } catch (error) {
@@ -136,11 +140,10 @@ module.exports = {
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
             
-            // ✅ Retorna com Base64
             let imagem_base64 = null;
             if (animal.foto) {
                 try {
-                    imagem_base64 = await this.lerImagemComoBase64(animal.foto);
+                    imagem_base64 = await lerImagemComoBase64(animal.foto);
                 } catch (error) {
                     console.warn('Erro ao carregar imagem:', error.message);
                 }
@@ -154,7 +157,7 @@ module.exports = {
                 descricao: animal.descricao,
                 data_resgate: animal.data_resgate,
                 adotado: animal.adotado,
-                imagem_base64: imagem_base64  // ✅ IMAGEM DIRETA NO JSON
+                imagem_base64: imagem_base64
             });
         } catch (error) {
             res.status(500).json({ 
@@ -194,11 +197,10 @@ module.exports = {
 
             const animalAtualizado = await Animal.update(id, dadosAtualizados);
             
-            // ✅ Retorna com Base64
             let imagem_base64 = null;
             if (dadosAtualizados.foto) {
                 try {
-                    imagem_base64 = await this.lerImagemComoBase64(dadosAtualizados.foto);
+                    imagem_base64 = await lerImagemComoBase64(dadosAtualizados.foto);
                 } catch (error) {
                     console.warn('Erro ao carregar imagem atualizada:', error.message);
                 }
@@ -212,7 +214,7 @@ module.exports = {
                 descricao: animalAtualizado.descricao,
                 data_resgate: animalAtualizado.data_resgate,
                 adotado: animalAtualizado.adotado,
-                imagem_base64: imagem_base64  // ✅ IMAGEM DIRETA NO JSON
+                imagem_base64: imagem_base64
             });
 
         } catch (error) {
