@@ -1,44 +1,51 @@
 const Animal = require('../models/Animal');
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 
-// Função auxiliar para ler imagens
+// Função auxiliar melhorada para ler imagens
 const lerImagemComoBase64 = async (filename) => {
-    return new Promise((resolve, reject) => {
+    try {
         const filePath = path.join(__dirname, '../uploads', filename);
         
         // Verifica se o arquivo existe
-        fs.access(filePath, fs.constants.F_OK, (err) => {
-            if (err) {
-                reject(new Error('Arquivo não encontrado: ' + filename));
-                return;
-            }
-            
-            // Lê o arquivo
-            fs.readFile(filePath, (error, data) => {
-                if (error) {
-                    reject(error);
-                    return;
-                }
-                
-                const base64 = data.toString('base64');
-                let mimeType = 'image/png';
-                
-                if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
-                    mimeType = 'image/jpeg';
-                } else if (filename.endsWith('.gif')) {
-                    mimeType = 'image/gif';
-                }
-                
-                resolve(`data:${mimeType};base64,${base64}`);
-            });
-        });
-    });
+        try {
+            await fs.access(filePath);
+        } catch (error) {
+            throw new Error('Arquivo não encontrado: ' + filename);
+        }
+        
+        // Lê o arquivo
+        const data = await fs.readFile(filePath);
+        const base64 = data.toString('base64');
+        
+        let mimeType = 'image/png';
+        if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) {
+            mimeType = 'image/jpeg';
+        } else if (filename.endsWith('.gif')) {
+            mimeType = 'image/gif';
+        }
+        
+        return `data:${mimeType};base64,${base64}`;
+    } catch (error) {
+        console.warn(`Erro ao processar imagem ${filename}:`, error.message);
+        throw error;
+    }
+};
+
+// Função para verificar se arquivo existe
+const arquivoExiste = async (filename) => {
+    try {
+        await fs.access(path.join(__dirname, '../uploads', filename));
+        return true;
+    } catch {
+        return false;
+    }
 };
 
 module.exports = {
     async listarAnimais(req, res) {
         try {
+            console.log('Buscando animais...');
             const animais = await Animal.findAll();
             
             const animaisComImagens = await Promise.all(
@@ -47,12 +54,15 @@ module.exports = {
                     
                     if (animal.foto) {
                         try {
-
-                            imagem_base64 = await lerImagemComoBase64(animal.foto);
+                            // Verifica se o arquivo existe antes de tentar ler
+                            const existe = await arquivoExiste(animal.foto);
+                            if (existe) {
+                                imagem_base64 = await lerImagemComoBase64(animal.foto);
+                            } else {
+                                console.warn(`Imagem ${animal.foto} não encontrada no sistema de arquivos`);
+                            }
                         } catch (error) {
-                            console.warn(`Imagem ${animal.foto} não encontrada:`, error.message);
-
-                            imagem_base64 = null;
+                            console.warn(`Erro ao processar imagem ${animal.foto}:`, error.message);
                         }
                     }
                     
@@ -64,11 +74,13 @@ module.exports = {
                         descricao: animal.descricao,
                         data_resgate: animal.data_resgate,
                         adotado: animal.adotado,
-                        imagem_base64: imagem_base64
+                        imagem_base64: imagem_base64,
+                        foto_nome: animal.foto // Para debug
                     };
                 })
             );
             
+            console.log(`Retornando ${animaisComImagens.length} animais`);
             res.json(animaisComImagens);
         } catch (error) {
             console.error('Erro ao listar animais:', error);
@@ -88,7 +100,12 @@ module.exports = {
             const { nome, tipo, nascimento, data_resgate, descricao } = req.body;
 
             if (!nome || !tipo) {
-                fs.unlinkSync(path.join(__dirname, '../uploads', req.file.filename));
+                // Use fs.promises para operações assíncronas
+                try {
+                    await fs.unlink(path.join(__dirname, '../uploads', req.file.filename));
+                } catch (unlinkError) {
+                    console.warn('Erro ao remover arquivo:', unlinkError.message);
+                }
                 return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
             }
 
@@ -118,13 +135,18 @@ module.exports = {
                 descricao: novoAnimal.descricao,
                 data_resgate: novoAnimal.data_resgate,
                 adotado: novoAnimal.adotado,
-                imagem_base64: imagem_base64
+                imagem_base64: imagem_base64,
+                foto_nome: novoAnimal.foto
             });
 
         } catch (error) {
             console.error('Erro ao cadastrar animal:', error);
             if (req.file) {
-                fs.unlinkSync(path.join(__dirname, '../uploads', req.file.filename));
+                try {
+                    await fs.unlink(path.join(__dirname, '../uploads', req.file.filename));
+                } catch (unlinkError) {
+                    console.warn('Erro ao remover arquivo:', unlinkError.message);
+                }
             }
             res.status(500).json({ 
                 error: 'Erro ao cadastrar animal',
@@ -143,7 +165,12 @@ module.exports = {
             let imagem_base64 = null;
             if (animal.foto) {
                 try {
-                    imagem_base64 = await lerImagemComoBase64(animal.foto);
+                    const existe = await arquivoExiste(animal.foto);
+                    if (existe) {
+                        imagem_base64 = await lerImagemComoBase64(animal.foto);
+                    } else {
+                        console.warn(`Imagem ${animal.foto} não encontrada`);
+                    }
                 } catch (error) {
                     console.warn('Erro ao carregar imagem:', error.message);
                 }
@@ -157,7 +184,8 @@ module.exports = {
                 descricao: animal.descricao,
                 data_resgate: animal.data_resgate,
                 adotado: animal.adotado,
-                imagem_base64: imagem_base64
+                imagem_base64: imagem_base64,
+                foto_nome: animal.foto
             });
         } catch (error) {
             res.status(500).json({ 
@@ -173,7 +201,13 @@ module.exports = {
             const animal = await Animal.findByPk(id);
             
             if (!animal) {
-                if (req.file) fs.unlinkSync(path.join(__dirname, '../uploads', req.file.filename));
+                if (req.file) {
+                    try {
+                        await fs.unlink(path.join(__dirname, '../uploads', req.file.filename));
+                    } catch (unlinkError) {
+                        console.warn('Erro ao remover arquivo:', unlinkError.message);
+                    }
+                }
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
 
@@ -189,7 +223,7 @@ module.exports = {
 
             if (req.file && animal.foto && animal.foto !== req.file.filename) {
                 try {
-                    fs.unlinkSync(path.join(__dirname, '../uploads', animal.foto));
+                    await fs.unlink(path.join(__dirname, '../uploads', animal.foto));
                 } catch (error) {
                     console.warn('Não foi possível remover a imagem antiga:', error.message);
                 }
@@ -200,7 +234,10 @@ module.exports = {
             let imagem_base64 = null;
             if (dadosAtualizados.foto) {
                 try {
-                    imagem_base64 = await lerImagemComoBase64(dadosAtualizados.foto);
+                    const existe = await arquivoExiste(dadosAtualizados.foto);
+                    if (existe) {
+                        imagem_base64 = await lerImagemComoBase64(dadosAtualizados.foto);
+                    }
                 } catch (error) {
                     console.warn('Erro ao carregar imagem atualizada:', error.message);
                 }
@@ -214,13 +251,14 @@ module.exports = {
                 descricao: animalAtualizado.descricao,
                 data_resgate: animalAtualizado.data_resgate,
                 adotado: animalAtualizado.adotado,
-                imagem_base64: imagem_base64
+                imagem_base64: imagem_base64,
+                foto_nome: animalAtualizado.foto
             });
 
         } catch (error) {
             if (req.file) {
                 try {
-                    fs.unlinkSync(path.join(__dirname, '../uploads', req.file.filename));
+                    await fs.unlink(path.join(__dirname, '../uploads', req.file.filename));
                 } catch (unlinkError) {
                     console.warn('Não foi possível remover a imagem:', unlinkError.message);
                 }
@@ -258,7 +296,7 @@ module.exports = {
 
             if (animal.foto) {
                 try {
-                    fs.unlinkSync(path.join(__dirname, '../uploads', animal.foto));
+                    await fs.unlink(path.join(__dirname, '../uploads', animal.foto));
                 } catch (error) {
                     console.warn('Não foi possível remover a imagem:', error.message);
                 }

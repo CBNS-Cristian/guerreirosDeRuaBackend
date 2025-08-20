@@ -8,7 +8,8 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
-app.set('trust proxy', 1); 
+// Configuração de proxy confiável
+app.set('trust proxy', 1);
 
 // Middlewares - CORS primeiro
 app.use(cors({
@@ -16,52 +17,65 @@ app.use(cors({
         'https://cbns-cristian.github.io',
         'https://guerreirosderua.onrender.com',
         'http://localhost:5500',
-        'http://localhost:3000'
+        'http://localhost:3000',
+        'http://127.0.0.1:5500',
+        'http://127.0.0.1:3000'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['Content-Length', 'Content-Type'],
     credentials: true,
     optionsSuccessStatus: 200
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting mais generoso
+// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000,
+  max: 100,
   message: JSON.stringify({
     error: 'Muitas requisições. Tente novamente em 15 minutos.'
   }),
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { trustProxy: false }
 });
 
-// Aplicar rate limit apenas em produção
-if (process.env.NODE_ENV === 'production') {
-  app.use('/api/', limiter);
-}
+app.use('/api/', limiter);
 
-// Middleware específico para arquivos estáticos (IMPORTANTE: resolver ORB)
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    next();
+});
+
 app.use('/uploads', (req, res, next) => {
-    // Headers para evitar bloqueio ORB
     res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Length');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Methods', 'GET');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     next();
-}, express.static(path.join(__dirname, 'uploads'), {
-    setHeaders: (res, path) => {
-        // Configurar content-type correto baseado na extensão do arquivo
-        if (path.endsWith('.png')) {
+});
+
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    setHeaders: (res, filePath) => {
+        // Headers para evitar bloqueio ORB (redundante mas seguro)
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+        
+        // Configurar content-type correto
+        if (filePath.endsWith('.png')) {
             res.setHeader('Content-Type', 'image/png');
-        } else if (path.endsWith('.jpg') || path.endsWith('.jpeg')) {
+        } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
             res.setHeader('Content-Type', 'image/jpeg');
-        } else if (path.endsWith('.gif')) {
+        } else if (filePath.endsWith('.gif')) {
             res.setHeader('Content-Type', 'image/gif');
         }
+        
+        // Cache para imagens
+        res.setHeader('Cache-Control', 'public, max-age=86400');
     }
 }));
 
@@ -69,17 +83,40 @@ app.use('/uploads', (req, res, next) => {
 app.use('/api/animais', animalRoutes);
 app.use('/api/auth', authRoutes);
 
-// Health check
+// Health check melhorado
 app.get('/health', (req, res) => {
+    const fs = require('fs');
+    const uploadsPath = path.join(__dirname, 'uploads');
+    
+    let uploadsCount = 0;
+    try {
+        uploadsCount = fs.readdirSync(uploadsPath).length;
+    } catch (error) {
+        console.warn('Pasta uploads não encontrada:', error.message);
+    }
+    
     res.status(200).json({ 
         status: 'online',
         timestamp: new Date().toISOString(),
-        ip: req.ip,
-        forwarded: req.headers['x-forwarded-for']
+        uploads: uploadsCount,
+        environment: process.env.NODE_ENV || 'development'
     });
 });
 
-// Rota de fallback para SPA
+// Rota para verificar arquivos existentes
+app.get('/api/debug/files', (req, res) => {
+    const fs = require('fs');
+    const uploadsPath = path.join(__dirname, 'uploads');
+    
+    try {
+        const files = fs.readdirSync(uploadsPath);
+        res.json({ files: files, count: files.length });
+    } catch (error) {
+        res.status(500).json({ error: 'Erro ao ler pasta uploads', details: error.message });
+    }
+});
+
+// Rota de fallback
 app.get('*', (req, res) => {
     res.status(404).json({ error: 'Endpoint não encontrado' });
 });
@@ -98,10 +135,6 @@ app.use((err, req, res, next) => {
         return res.status(413).json({ error: 'Arquivo muito grande. Tamanho máximo: 5MB' });
     }
     
-    if (err.message === 'Tipo de arquivo não suportado') {
-        return res.status(415).json({ error: err.message });
-    }
-
     res.status(500).json({ 
         error: 'Erro interno do servidor',
         ...(process.env.NODE_ENV === 'development' && { details: err.message })
@@ -110,9 +143,11 @@ app.use((err, req, res, next) => {
 
 // Inicialização
 const PORT = process.env.PORT || 27752;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
-    console.log(`📁 Acesse os uploads em: http://localhost:${PORT}/uploads`);
+    console.log(`🌐 URLs disponíveis:`);
+    console.log(`   - Local: http://localhost:${PORT}`);
+    console.log(`   - Network: http://0.0.0.0:${PORT}`);
+    console.log(`📁 Uploads: http://localhost:${PORT}/uploads`);
     console.log(`🛠️  Modo: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔒 Trust proxy: ${app.get('trust proxy')}`);
 });
