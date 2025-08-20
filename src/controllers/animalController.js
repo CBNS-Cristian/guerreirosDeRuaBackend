@@ -48,40 +48,21 @@ module.exports = {
             console.log('Buscando animais...');
             const animais = await Animal.findAll();
             
-            const animaisComImagens = await Promise.all(
-                animais.map(async (animal) => {
-                    let imagem_base64 = null;
-                    
-                    if (animal.foto) {
-                        try {
-                            // Verifica se o arquivo existe antes de tentar ler
-                            const existe = await arquivoExiste(animal.foto);
-                            if (existe) {
-                                imagem_base64 = await lerImagemComoBase64(animal.foto);
-                            } else {
-                                console.warn(`Imagem ${animal.foto} não encontrada no sistema de arquivos`);
-                            }
-                        } catch (error) {
-                            console.warn(`Erro ao processar imagem ${animal.foto}:`, error.message);
-                        }
-                    }
-                    
-                    return {
-                        id: animal.id,
-                        nome: animal.nome,
-                        tipo: animal.tipo,
-                        nascimento: animal.nascimento,
-                        descricao: animal.descricao,
-                        data_resgate: animal.data_resgate,
-                        adotado: animal.adotado,
-                        imagem_base64: imagem_base64,
-                        foto_nome: animal.foto // Para debug
-                    };
-                })
-            );
+  
+            const animaisFormatados = animais.map(animal => ({
+                id: animal.id,
+                nome: animal.nome,
+                tipo: animal.tipo,
+                nascimento: animal.nascimento,
+                descricao: animal.descricao,
+                data_resgate: animal.data_resgate,
+                adotado: animal.adotado,
+                imagem_base64: animal.imagem_base64,
+                foto_nome: animal.foto
+            }));
             
-            console.log(`Retornando ${animaisComImagens.length} animais`);
-            res.json(animaisComImagens);
+            console.log(`Retornando ${animaisFormatados.length} animais`);
+            res.json(animaisFormatados);
         } catch (error) {
             console.error('Erro ao listar animais:', error);
             res.status(500).json({ 
@@ -100,7 +81,6 @@ module.exports = {
             const { nome, tipo, nascimento, data_resgate, descricao } = req.body;
 
             if (!nome || !tipo) {
-                // Use fs.promises para operações assíncronas
                 try {
                     await fs.unlink(path.join(__dirname, '../uploads', req.file.filename));
                 } catch (unlinkError) {
@@ -109,6 +89,16 @@ module.exports = {
                 return res.status(400).json({ error: 'Nome e tipo são obrigatórios' });
             }
 
+
+            let imagem_base64 = null;
+            try {
+                imagem_base64 = await lerImagemComoBase64(req.file.filename);
+            } catch (error) {
+                console.warn('Erro ao processar imagem nova:', error.message);
+   
+            }
+
+
             const novoAnimal = await Animal.create({
                 nome,
                 tipo,
@@ -116,16 +106,9 @@ module.exports = {
                 data_resgate: data_resgate || new Date().toISOString().split('T')[0],
                 descricao: descricao || '',
                 foto: req.file.filename,
+                imagem_base64: imagem_base64, 
                 adotado: false
             });
-
-            // Gera Base64 para a nova imagem
-            let imagem_base64 = null;
-            try {
-                imagem_base64 = await lerImagemComoBase64(req.file.filename);
-            } catch (error) {
-                console.warn('Erro ao processar imagem nova:', error.message);
-            }
 
             res.status(201).json({
                 id: novoAnimal.id,
@@ -135,7 +118,7 @@ module.exports = {
                 descricao: novoAnimal.descricao,
                 data_resgate: novoAnimal.data_resgate,
                 adotado: novoAnimal.adotado,
-                imagem_base64: imagem_base64,
+                imagem_base64: novoAnimal.imagem_base64, 
                 foto_nome: novoAnimal.foto
             });
 
@@ -162,20 +145,6 @@ module.exports = {
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
             
-            let imagem_base64 = null;
-            if (animal.foto) {
-                try {
-                    const existe = await arquivoExiste(animal.foto);
-                    if (existe) {
-                        imagem_base64 = await lerImagemComoBase64(animal.foto);
-                    } else {
-                        console.warn(`Imagem ${animal.foto} não encontrada`);
-                    }
-                } catch (error) {
-                    console.warn('Erro ao carregar imagem:', error.message);
-                }
-            }
-            
             res.json({
                 id: animal.id,
                 nome: animal.nome,
@@ -184,7 +153,7 @@ module.exports = {
                 descricao: animal.descricao,
                 data_resgate: animal.data_resgate,
                 adotado: animal.adotado,
-                imagem_base64: imagem_base64,
+                imagem_base64: animal.imagem_base64, 
                 foto_nome: animal.foto
             });
         } catch (error) {
@@ -211,6 +180,17 @@ module.exports = {
                 return res.status(404).json({ error: 'Animal não encontrado' });
             }
 
+            let novaImagemBase64 = animal.imagem_base64;
+            if (req.file) {
+                try {
+                    novaImagemBase64 = await lerImagemComoBase64(req.file.filename);
+                } catch (error) {
+                    console.warn('Erro ao processar nova imagem:', error.message);
+
+                    novaImagemBase64 = animal.imagem_base64;
+                }
+            }
+
             const dadosAtualizados = {
                 nome: req.body.nome || animal.nome,
                 tipo: req.body.tipo || animal.tipo,
@@ -218,6 +198,7 @@ module.exports = {
                 data_resgate: req.body.data_resgate || animal.data_resgate,
                 descricao: req.body.descricao || animal.descricao,
                 foto: req.file ? req.file.filename : animal.foto,
+                imagem_base64: novaImagemBase64, 
                 adotado: req.body.adotado !== undefined ? req.body.adotado : animal.adotado
             };
 
@@ -231,18 +212,6 @@ module.exports = {
 
             const animalAtualizado = await Animal.update(id, dadosAtualizados);
             
-            let imagem_base64 = null;
-            if (dadosAtualizados.foto) {
-                try {
-                    const existe = await arquivoExiste(dadosAtualizados.foto);
-                    if (existe) {
-                        imagem_base64 = await lerImagemComoBase64(dadosAtualizados.foto);
-                    }
-                } catch (error) {
-                    console.warn('Erro ao carregar imagem atualizada:', error.message);
-                }
-            }
-            
             res.json({
                 id: animalAtualizado.id,
                 nome: animalAtualizado.nome,
@@ -251,7 +220,7 @@ module.exports = {
                 descricao: animalAtualizado.descricao,
                 data_resgate: animalAtualizado.data_resgate,
                 adotado: animalAtualizado.adotado,
-                imagem_base64: imagem_base64,
+                imagem_base64: animalAtualizado.imagem_base64, 
                 foto_nome: animalAtualizado.foto
             });
 
